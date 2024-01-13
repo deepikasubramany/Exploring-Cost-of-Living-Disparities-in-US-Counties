@@ -1,0 +1,706 @@
+---
+title: "CostOfLivingProject"
+output: html_document
+date: "2023-12-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+>Introduction:
+In this final project,We examine the US Family Budget Dataset, which provides insights into the cost of living in different US counties.The project's primary objective is to investigate the cost of living disparities among different family types and across various US counties.The project will also explore the relationship between family income and the overall cost of living.We will also delve into the distribution of housing costs by state. 
+
+>Data Loading:
+The required libraries, including dplyr, ggplot2, lubridate, skimr, tidyr, caret, and randomForest, are loaded to facilitate data manipulation, visualization, and machine learning tasks. Subsequently, the dataset named CostOfLiving is read from a CSV file located at 'data/cost_of_living_us.csv'.
+
+```{r}
+# Load required libraries
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(skimr)
+library(tidyr)
+library(caret)
+library(randomForest) # Random forests
+```
+
+
+```{r}
+# Read the dataset
+CostOfLiving <- read.csv('data/cost_of_living_us.csv')
+```
+
+> Data Preprocessing:
+The initial data preprocessing steps involve separating the 'family_member_count' column into 'parents' and 'child' columns. The regular expression p|c is used as the separator, and the resulting columns are converted to numeric format. Subsequently, a new column 'family_count' is created by summing the 'parents' and 'child' columns. The process includes checking for null values in the 'median_family_income' column, removing any rows with null values using na.omit, and checking again for null values.
+
+```{r}
+CostOfLiving1 <- CostOfLiving %>%
+  separate(family_member_count, 
+           into = c("parents", "child"),  
+           sep = "p|c",
+           convert = TRUE,
+           extra = "merge") %>%
+  mutate(child = as.numeric(gsub("c", "", child)))
+```
+
+
+
+```{r}
+# Check for null values
+sum(is.na(CostOfLiving1$median_family_income))
+```
+
+```{r}
+CostOfLiving1 <- na.omit(CostOfLiving1)
+```
+
+
+```{r}
+sum(is.na(CostOfLiving1$median_family_income))
+```
+
+```{r}
+CostOfLiving1 <- CostOfLiving1 %>%
+  mutate(family_count = parents + child)
+```
+
+>The 'family_member_count' column is split into 'parents' and 'child' columns, converting them to numeric format. Null values in the 'median_family_income' column are initially checked, and rows with null values are removed. Finally, a new column 'family_count' is created by summing 'parents' and 'child'.
+
+
+
+> Exploratory Data Analysis (EDA) for the Entire Dataset:
+Descriptive statistics and visualizations are employed to gain insights into the characteristics of the dataset.
+
+```{r}
+# Summary statistics for the entire dataset
+summary(CostOfLiving1)
+```
+
+>The summary statistics for various columns in the dataset, such as 'case_id', 'state', 'isMetro', 'areaname', 'county', 'parents', 'child', 'housing_cost', 'food_cost', and others. The summary includes measures such as mean, median, minimum, maximum, and quartiles for numerical variables.
+
+
+
+```{r}
+# Distribution of total cost by family count
+CostOfLiving1 %>%
+  group_by(family_count) %>%
+  summarize(mean_total_cost = mean(total_cost), 
+            median_total_cost = median(total_cost),
+            Count = n())
+```
+
+
+```{r}
+# Descriptive statistics for total cost
+Cost_mean <- mean(CostOfLiving1$total_cost)
+Cost_median <- median(CostOfLiving1$total_cost)
+Cost_sd <- sd(CostOfLiving1$total_cost)
+Cost_min <- min(CostOfLiving1$total_cost)
+Cost_max <- max(CostOfLiving1$total_cost)
+Cost_range <- Cost_max - Cost_min
+Cost_p95 <- quantile(CostOfLiving1$total_cost, 0.95)
+Cost_p99 <- quantile(CostOfLiving1$total_cost, 0.99)
+Cost_iqr <- IQR(CostOfLiving1$total_cost)
+Cost_cv <- Cost_sd / Cost_mean
+```
+
+
+`
+```{r}
+# Print summary statistics
+
+sprintf("Mean cost = %.2f", Cost_mean)
+sprintf("Median cost = %.2f", Cost_median)  
+sprintf("Std dev cost = %.2f", Cost_sd)
+sprintf("Min cost = %.2f", Cost_min)
+sprintf("Max cost = %.2f", Cost_max)
+sprintf("Price cost = %.2f", Cost_range)
+sprintf("95th percentile = %.2f", Cost_p95)
+sprintf("99th percentile = %.2f", Cost_p99)
+sprintf("IQR = %.2f", Cost_iqr)
+sprintf("Coefficient of variation = %.3f", Cost_cv)
+```
+>These statistics are useful for understanding the distribution and characteristics of the total cost variables in CostOfliving dataset.
+
+
+
+```{r}
+CostOfLiving1 %>% 
+  group_by(family_count, isMetro) %>%
+  summarise(mean_total_cost = mean(total_cost)) %>%
+  ggplot(aes(x = family_count, y = mean_total_cost, fill = factor(isMetro))) +
+  geom_col(position = "dodge") +
+  facet_wrap(~ isMetro, scales = "free_y") +
+  labs(title = "Cost Distribution by Family Count and Metropolitan Status",
+       x = "Family Count",
+       y = "Mean Total Cost",
+       fill = "Metropolitan Status")
+```
+
+>Grouped bar plot where each bar represents the mean total cost for a specific family count.
+
+
+
+```{r}
+ggplot(CostOfLiving1, aes(x = family_count, y = taxes)) +
+  geom_point() +
+  labs(title = "Scatterplot of Family Member Count vs Taxes",
+       x = "Family Member Count",
+       y = "Taxes")
+```
+
+> This scatterplot helps to understand how the Taxes varies with the number of family members.
+
+
+> Histogram
+
+```{r}
+ggplot(data = CostOfLiving1, aes(x = median_family_income)) +
+  geom_histogram(fill = "coral", color = "lightblue") + 
+  labs(binwidth=5000,
+    title = "Distribution of family income",
+    x = "Income",
+    y = "Count"
+  )
+```
+
+> The histogram suggests that a significant proportion of families in the dataset have incomes between $50,000 and $100,000. There is also noticeable variability, with some families reporting higher incomes, creating a tail on the right side of the distribution.
+
+
+
+> Boxplots are way of looking at the distribution of a variable
+
+```{r}
+ggplot(CostOfLiving1, aes(x=isMetro, y=total_cost)) +
+  geom_boxplot()+
+  labs(title="Distribution of total cost by metro",
+       x="Metro",
+       y="Total Cost") 
+```
+
+> People living in metro cities has higher variability as total cost increases compared to non metro cities.The box plot shows that in metro areas, costs vary more with many outliers,indicating a wider expense range. In non-metro areas ('Metro False'), costs are more focused with fewer outliers.Moreover, the median total cost for metro areas is noticeably higher than for non-metro areas. This suggests that, on average, people in metro areas tend to have higher total costs compared to those in non-metro areas."
+
+
+>This boxplot allows you to compare the distribution of healthcare costs across different family member counts.
+
+```{r}
+ggplot(CostOfLiving1, aes(x = family_count, y = healthcare_cost, fill = factor(family_count))) +
+  geom_boxplot() +
+  labs(title = "Healthcare Cost Distribution by Family Count",
+       x = "Family Member Count",
+       y = "Healthcare Cost",
+       fill = "Family Count")
+```
+
+> From the plot, we can say that family count of 6 has many outliers comapred family count of less than 2. The health care cost is hgh when the count increases.
+
+
+
+
+```{r}
+# Cost breakdown by metropolitan status
+Cost <- CostOfLiving1 %>%
+  group_by(isMetro) %>%
+  summarize(mean_housingcost = mean(housing_cost), 
+            mean_foodcost = mean(food_cost),
+            mean_transportation_cost = mean(transportation_cost),
+            mean_healthcare_cost = mean(healthcare_cost),
+            mean_childCare_cost = mean(childcare_cost),
+            Count = n())
+Cost
+```
+
+>The tibble Cost presents the mean costs for different categories, including housing, food, transportation, healthcare, and childcare, separated by metropolitan status. It reveals average costs in both metropolitan (TRUE) and non-metropolitan (FALSE) areas.
+
+
+```{r}
+# combine all costs to one column
+Costall <- Cost %>% 
+  mutate(Costall = mean_housingcost + mean_foodcost + 
+            mean_transportation_cost + mean_healthcare_cost +mean_childCare_cost)
+```
+
+>Plot cost breakdown by category
+
+```{r}
+# Plot cost breakdown by category
+data_long <- Costall %>% 
+  pivot_longer(cols = mean_housingcost:mean_childCare_cost, 
+               names_to = "category", 
+               values_to = "cost")
+
+ggplot(data_long, aes(x = isMetro, y = cost)) + 
+  geom_col() +
+  facet_wrap(~category, ncol=2)
+```
+
+> In metropolitan areas, the mean housing cost is higher at $13,061.64 compared to non-metropolitan areas at $9,895.31. However, transportation costs are similar, with metropolitan areas at $13,378.36 and non-metropolitan areas at $13,721.75.
+
+
+
+
+>Filtering Data
+From The CostOfLiving1 dataset selected only these 9 states ("CA", "CO", "GA","LA","MA", "MI","NY","VA"), creating a new dataset named select_states_Cost for further analysis.
+
+```{r}
+# Filter data for selected states
+selected_states <- c("CA", "CO", "GA","LA","MA", "MI","NY","VA")
+
+select_states_Cost <- CostOfLiving1 %>%
+  filter(state %in% selected_states)
+```
+
+
+
+```{r}
+summary_by_state <- select_states_Cost %>%
+  filter(median_family_income < 50000) %>%
+  group_by(state, isMetro) %>%
+  summarise(
+    mean_housing_cost = mean(housing_cost, na.rm = TRUE),
+    mean_food_cost = mean(food_cost, na.rm = TRUE),
+    mean_transportation_cost = mean(transportation_cost, na.rm = TRUE),
+    mean_healthcare_cost = mean(healthcare_cost, na.rm = TRUE),
+    mean_childcare_cost = mean(childcare_cost, na.rm = TRUE),
+    mean_taxes = mean(taxes, na.rm = TRUE),
+  )
+
+summary_by_state
+```
+
+>The table shows average costs for housing, food, and transportation in states where families earn less than $50,000. For example, in Colorado, the average housing cost is $10,066.80 for non-metropolitan areas. These numbers help compare living expenses in different states with lower median family incomes.
+
+
+
+> Distribution of Plots
+
+```{r}
+ggplot(select_states_Cost, aes(x = state, fill = isMetro)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Metro Classification Across States",
+       x = "State",
+       y = "Count")
+```
+
+> From this bar plot we can say that Massachusetts (MA) exhibits a lower count in both metro and non-metro categories,On the contrary, the state of Georgia (GA) stands out with a higher count in non-metro areas, indicating a substantial proportion of its counties lying outside metropolitan regions.
+
+
+
+```{r}
+# Distribution of housing cost by state
+ggplot(select_states_Cost, aes(x = median_family_income, y = housing_cost, fill = state)) +
+  geom_boxplot() +
+  labs(x = "Median Family Income", y = "housing cost") +
+  ggtitle("Distribution of house cost by state") +
+  theme_minimal() 
+```
+
+> The boxplot indicates that in California (median family income $120,000), housing costs exhibit numerous outliers, indicating higher variability. Michigan (median family income $80,000) has fewer outliers, suggesting a more consistent housing cost distribution. Louisiana shows no outliers, reflecting a relatively uniform and less variable housing cost pattern.
+
+```{r}
+ggplot(select_states_Cost, aes(x = state, y = healthcare_cost)) +
+ geom_violin() +
+ labs(title = "Healthcare Cost Distribution by State",
+      x = "State",
+      y = "Healthcare Cost")
+```
+
+
+
+```{r}
+# Bar plot faceted by state
+ggplot(select_states_Cost, aes(x = family_count, y = food_cost)) +
+  geom_col() +
+  facet_wrap(~state) +
+  labs(title = "Plot of Food Cost Faceted by State",
+       x = "Family Count",
+       y = "Food Cost")
+```
+
+>The plot compares food costs in different states based on family sizes. For Massachusetts (MA), food costs are consistently lower across all family counts (2, 4, 6). In Georgia (GA) and Virginia (VA), food costs are higher for families with 5 members but lower for families with fewer than 2 members. This visual summary helps easily identify state-specific patterns in how food costs vary with family size.
+
+
+
+>Calculates the average childcare cost for families with children, grouped by state, number of parents, and number of children.
+
+```{r}
+select_states_Cost %>%
+  filter(child > 0) %>% 
+  group_by(state, parents, child) %>%
+  summarise(Count = n(),
+    avg_childcare = mean(childcare_cost, na.rm = TRUE)
+  )
+```
+
+>The results provides insights into the distribution of childcare costs across different family structures in selected states.
+
+
+```{r}
+# Load summarized data
+sum_df <- select_states_Cost %>%
+  filter(child > 0) %>%
+  group_by(state, parents, child) %>%
+  summarise(Count = n(),
+            avg_childcare = mean(childcare_cost, na.rm = TRUE))
+
+# Bar plot of average childcare cost by state  
+ggplot(sum_df, aes(x = state, y = avg_childcare)) +
+  geom_col() +
+  labs(title = "Average Childcare Cost by State for Families with Children",
+       x = "State",
+       y = "Average Childcare Cost")
+
+
+# Bar plot faceted by number of parents
+ggplot(sum_df, aes(x = state, y = avg_childcare)) +
+  geom_col() +
+  facet_wrap(~parents) +
+  labs(title = "Average Childcare Cost by State and Number of Parents")
+```
+
+>This bar plot, with facets based on the number of parents, offers a more detailed perspective. In Massachusetts, childcare costs are notably high for families with both one and two parents. In contrast, Louisiana exhibits lower childcare costs for families with one or two parents. 
+
+
+>Correlation matrix for the whole dataset
+
+```{r}
+# Correlation matrix
+correlation_matrix <- cor(select_states_Cost[, c("housing_cost", "food_cost", "transportation_cost", "healthcare_cost", "other_necessities_cost", "childcare_cost", "taxes", "total_cost", "median_family_income")])
+```
+
+>Calculates the correlation matrix for selected numeric variables in the select_states_Cost dataset. The resulting matrix (correlation_matrix) provides insights into the relationships between various cost-related and income variables.
+
+
+> Plot correlation matrix using ggplot2
+
+```{r}
+library(reshape2)
+
+correlation_melted <- melt(correlation_matrix)
+ggplot(correlation_melted, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab",
+                       name="Correlation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, size = 10, hjust = 1)) +
+  coord_fixed()
+```
+
+
+>Calculates the correlation matrix for selected numeric variables in the select_states_Cost dataset, extracts the correlation values for the variable 'total_cost,' and then sorts the variables based on their correlation values with 'total_cost.'
+
+
+```{r}
+# Select numeric variables from your dataset
+numeric_variables <- select_states_Cost[sapply(select_states_Cost, is.numeric)]
+
+# Calculate the correlation matrix for numeric variables
+correlation_matrix <- cor(numeric_variables)
+
+# Extract correlation values for 'total_cost'
+cor_with_total_cost<- correlation_matrix[, "total_cost"]
+
+# Sort variables based on correlation values
+sorted_correlation <- sort(cor_with_total_cost, decreasing = TRUE)
+
+sorted_correlation
+```
+
+>The output provides the correlation values between the variable 'total_cost' and other numeric variables in the dataset, sorted in descending order based on their correlation strength. 
+
+>Model Building
+We're building predictive modeling to estimate total costs using all variables, specifically focusing on the US cost of living dataset. Our goal is to create regression models—both linear and random forest—that can predict total costs accurately for new instances. These models aim to capture different aspects of the connections between predictor variables and the target total cost in the dataset.
+
+
+
+>Data Partitioning
+
+```{r}
+# Simple partition into train (80%) and test (20%) set 
+set.seed(547) 
+trainIndex <- createDataPartition(select_states_Cost$total_cost, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+Cost_train <- select_states_Cost[trainIndex, ]
+Cost_test <- select_states_Cost[-trainIndex, ]
+```
+
+
+>This code partitions the select_states_Cost dataset into training (Cost_train) and testing (Cost_test) sets. The training set contains 80% of the data, and the testing set contains the remaining 20%. The createDataPartition function is used for random partitioning.
+
+
+
+```{r}
+# Write training data to CSV
+write.csv(Cost_train, "train_data.csv", row.names = FALSE)
+
+# Write testing data to CSV
+write.csv(Cost_test, "test_data.csv", row.names = FALSE)
+```
+
+
+>Linear Model
+
+```{r}
+# Train models
+
+ModelLinear1 <- lm(total_cost ~ other_necessities_cost + childcare_cost + food_cost, data = Cost_train)
+ModelLinear2 <- lm(total_cost ~ child + healthcare_cost + transportation_cost, data = Cost_train)
+ModelLinear3 <- lm(total_cost ~ taxes + housing_cost + family_count + food_cost + childcare_cost + healthcare_cost, data = Cost_train)
+ModelLinear4 <- lm(total_cost ~ food_cost + healthcare_cost, data = Cost_train)
+ModelLinear5 <- lm(total_cost ~ other_necessities_cost + food_cost + childcare_cost + healthcare_cost, data = Cost_train)
+ModelLinear6 <- lm(total_cost ~ family_count + child + transportation_cost + housing_cost, data = Cost_train)
+
+
+
+
+```
+
+
+>This section trains multiple linear regression models (ModelLinear1 to ModelLinear6) using different combinations of predictor variables on the training data (Cost_train).
+
+
+
+```{r}
+# Calculate MAE on training data
+linear_mae_train <- c(MAE(Cost_train$total_cost, ModelLinear1$fitted.values),
+                MAE(Cost_train$total_cost, ModelLinear2$fitted.values),
+                MAE(Cost_train$total_cost, ModelLinear3$fitted.values),
+                MAE(Cost_train$total_cost, ModelLinear4$fitted.values),
+                MAE(Cost_train$total_cost, ModelLinear5$fitted.values),
+                MAE(Cost_train$total_cost, ModelLinear6$fitted.values))
+              
+                
+
+linear_mae_train
+```
+
+>This code calculates the Mean Absolute Error (MAE) for each linear regression model on the training data.
+From the MAE values, we can observe that ModelLinear3 has the lowest MAE (941.0661), indicating that it performs the best on the training data among the models we've trained. Lower MAE suggests that the model's predictions are, on average, closer to the actual values.
+
+
+```{r}
+linear_rmse_train <- c(sqrt(mean((Cost_train$total_cost - ModelLinear1$fitted.values)^2)),
+                      sqrt(mean((Cost_train$total_cost - ModelLinear2$fitted.values)^2)),
+                      sqrt(mean((Cost_train$total_cost - ModelLinear3$fitted.values)^2)),
+                      sqrt(mean((Cost_train$total_cost - ModelLinear4$fitted.values)^2)),
+                      sqrt(mean((Cost_train$total_cost - ModelLinear5$fitted.values)^2)),
+                      sqrt(mean((Cost_train$total_cost - ModelLinear6$fitted.values)^2)))
+linear_rmse_train
+```
+
+>We calculated the Root Mean Squared Error (RMSE) for each linear regression model on the test data.
+From the results, ModelLinear3 exhibits the lowest RMSE of 1336.523, indicating that it has the smallest average prediction error among the models on the training data. 
+On the other hand, ModelLinear2 has a notably higher RMSE of 16382.655, suggesting that its predictions deviate more substantially from the actual values. 
+The RMSE values further support the assessment made based on the Mean Absolute Error (MAE), reinforcing that ModelLinear3 performs exceptionally well and provides accurate predictions on the training dataset
+
+
+```{r}
+# Use fitted model to make predictions on test data
+predict_linearM1 <- predict(ModelLinear1, newdata = Cost_test)
+predict_linearM2 <- predict(ModelLinear2, newdata = Cost_test)
+predict_linearM3 <- predict(ModelLinear3, newdata = Cost_test)
+predict_linearM4 <- predict(ModelLinear4, newdata = Cost_test)
+predict_linearM5 <- predict(ModelLinear5, newdata = Cost_test)
+predict_linearM6 <- predict(ModelLinear6, newdata = Cost_test)
+
+
+# Compute MAE for the predictions on the test data
+linear_mae_test1 <- c(MAE(Cost_test$total_cost, predict_linearM1),
+               MAE(Cost_test$total_cost, predict_linearM2),
+               MAE(Cost_test$total_cost, predict_linearM3),
+               MAE(Cost_test$total_cost, predict_linearM4),
+               MAE(Cost_test$total_cost, predict_linearM5),
+               MAE(Cost_test$total_cost, predict_linearM6))
+               
+               
+
+linear_mae_test1
+
+```
+
+>This section uses the trained linear regression models to make predictions on the test data and computes the Mean Absolute Error (MAE) for each model on the test set.
+Among these models, ModelLinear3 exhibits the lowest MAE on the test data, indicating that it provides the most accurate predictions compared to the other models. 
+This assessment aligns with the model performance observed on the training data, reinforcing the superiority of ModelLinear3 in terms of predictive accuracy on the test set.
+
+
+
+
+```{r}
+linear_rmse_test <- c(RMSE(Cost_test$total_cost, predict_linearM1),
+                      RMSE(Cost_test$total_cost, predict_linearM2),
+                      RMSE(Cost_test$total_cost, predict_linearM3),
+                      RMSE(Cost_test$total_cost, predict_linearM4),
+                      RMSE(Cost_test$total_cost, predict_linearM5),
+                      RMSE(Cost_test$total_cost, predict_linearM6))
+
+
+linear_rmse_test
+```
+
+
+>The provided code calculates the Root Mean Squared Error (RMSE) for each linear regression model on the test data.
+Consistent with the MAE results, ModelLinear3 demonstrates the lowest RMSE on the test data, indicating that it remains the best-performing model. 
+The RMSE metric further reinforces ModelLinear3's superiority in providing accurate predictions on new, unseen data. This aligns with the model's performance observed on the training data, underscoring its reliability and effectiveness in generalizing to the test set.
+
+
+
+```{r}
+ggplot(data.frame(actual=Cost_test$total_cost, predicted=predict_linearM1)) + 
+  geom_point(aes(x=actual, y=predicted))
+ggplot(data.frame(actual=Cost_test$total_cost, predicted=predict_linearM2)) + 
+  geom_point(aes(x=actual, y=predicted))
+ggplot(data.frame(actual=Cost_test$total_cost, predicted=predict_linearM3)) + 
+  geom_point(aes(x=actual, y=predicted))
+ggplot(data.frame(actual=Cost_test$total_cost, predicted=predict_linearM4)) + 
+  geom_point(aes(x=actual, y=predicted))
+ggplot(data.frame(actual=Cost_test$total_cost, predicted=predict_linearM5)) + 
+  geom_point(aes(x=actual, y=predicted))
+ggplot(data.frame(actual=Cost_test$total_cost, predicted=predict_linearM6)) + 
+  geom_point(aes(x=actual, y=predicted))
+```
+
+>The provided code generates scatter plots for each linear regression model, comparing the actual total costs from the test data (x-axis) with the corresponding predicted values (y-axis). 
+These visualizations provide a graphical representation of how well the models' predictions align with the actual data. In each plot, the points ideally form a diagonal line, indicating perfect alignment between predictions and actual values. Deviations from this line signify prediction errors. 
+
+>ModelLinear3 exhibits the tightest clustering around the diagonal, reflecting its superior predictive accuracy, as corroborated by the previously computed MAE and RMSE metrics. Conversely, ModelLinear2 shows more scattered points, indicative of its higher MAE and RMSE values. 
+The visualizations offer an intuitive understanding of the models' performance, with ModelLinear3 standing out as the most reliable in capturing the test dataset's patterns.
+
+
+>Random Forest Model
+
+```{r}
+# Assuming total_cost is the outcome variable
+model_rf1 <- randomForest(total_cost ~ other_necessities_cost + childcare_cost + food_cost, data = Cost_train)
+model_rf2 <- randomForest(total_cost ~ child + healthcare_cost + transportation_cost, data = Cost_train)
+model_rf3 <- randomForest(total_cost ~ taxes + housing_cost + family_count + food_cost + childcare_cost + healthcare_cost, data = Cost_train)
+model_rf4 <- randomForest(total_cost ~ food_cost + healthcare_cost, data = Cost_train)
+model_rf5 <- lm(total_cost ~ other_necessities_cost + food_cost + childcare_cost + healthcare_cost, data = Cost_train)
+model_rf6 <- lm(total_cost ~ family_count + child + transportation_cost + housing_cost, data = Cost_train)
+```
+
+
+>The provided code trains multiple random forest models (model_rf1 to model_rf6) using different combinations of predictor variables on the training data (Cost_train). Subsequently, the Mean Absolute Error (MAE) is calculated for each model on the training data.
+
+```{r}
+pred_train1 <- predict(model_rf1, Cost_train)
+pred_train2 <- predict(model_rf2, Cost_train)
+pred_train3 <- predict(model_rf3, Cost_train)
+pred_train4 <- predict(model_rf4, Cost_train)
+pred_train5 <- predict(model_rf5, Cost_train)
+pred_train6 <- predict(model_rf6, Cost_train)
+
+# Assess performance 
+rf_mae_train1 <- mean(abs(pred_train1 - Cost_train$total_cost))
+rf_mae_train2 <- mean(abs(pred_train2 - Cost_train$total_cost))
+rf_mae_train3 <- mean(abs(pred_train3 - Cost_train$total_cost))
+rf_mae_train4 <- mean(abs(pred_train4 - Cost_train$total_cost))
+rf_mae_train5 <- mean(abs(pred_train5 - Cost_train$total_cost))
+rf_mae_train6 <- mean(abs(pred_train6 - Cost_train$total_cost))
+
+
+rf_mae_train1
+rf_mae_train2
+rf_mae_train3
+rf_mae_train4
+rf_mae_train5
+rf_mae_train6
+```
+
+
+>This code calculates the Mean Absolute Error (MAE) for each random forest model on the training data.
+>Among these models, model_rf3 demonstrates the lowest MAE, indicating that it provides the most accurate predictions on the training data. This aligns with the observed trend of superior performance for model_rf3, suggesting that it is the most effective in capturing the underlying patterns in the training dataset and making accurate predictions of total cost
+
+
+```{r}
+pred_test1 <- predict(model_rf1, Cost_test)
+pred_test2 <- predict(model_rf2, Cost_test)
+pred_test3 <- predict(model_rf3, Cost_test)
+pred_test4 <- predict(model_rf4, Cost_test)
+pred_test5 <- predict(model_rf5, Cost_test)
+pred_test6 <- predict(model_rf6, Cost_test)
+
+rf_mae_test1 <- mean(abs(pred_test1 - Cost_test$total_cost))
+rf_mae_test2 <- mean(abs(pred_test2 - Cost_test$total_cost))
+rf_mae_test3 <- mean(abs(pred_test3 - Cost_test$total_cost))
+rf_mae_test4 <- mean(abs(pred_test4 - Cost_test$total_cost))
+rf_mae_test5 <- mean(abs(pred_test5 - Cost_test$total_cost))
+rf_mae_test6 <- mean(abs(pred_test6 - Cost_test$total_cost))
+
+
+rf_mae_test1
+rf_mae_test2
+rf_mae_test3
+rf_mae_test4
+rf_mae_test5
+rf_mae_test6
+```
+
+>The provided code predicts total costs using each trained random forest model on the test data (Cost_test) and calculates the Mean Absolute Error (MAE) for each model. 
+
+>Once again, model_rf3 exhibits the lowest MAE on the test set, indicating its superior predictive accuracy compared to the other models. 
+
+>This consistency between the training and test performance suggests that model_rf3 generalizes well to new, unseen data, reinforcing its effectiveness in accurately predicting total costs.
+
+
+
+
+```{r}
+ggplot(data = Cost_test, aes(x = total_cost)) +
+  geom_point(aes(y = pred_test1)) +
+  ggtitle("Actual vs. Predicted (Model 1)")
+
+ggplot(data = Cost_test, aes(x = total_cost)) +
+  geom_point(aes(y = pred_test2)) +
+  ggtitle("Actual vs. Predicted (Model 2)")
+
+ggplot(data = Cost_test, aes(x = total_cost)) +
+  geom_point(aes(y = pred_test3)) +
+  ggtitle("Actual vs. Predicted (Model 3)")
+
+ggplot(data = Cost_test, aes(x = total_cost)) +
+  geom_point(aes(y = pred_test4)) +
+  ggtitle("Actual vs. Predicted (Model 4)")
+
+ggplot(data = Cost_test, aes(x = total_cost)) +
+  geom_point(aes(y = pred_test5)) +
+  ggtitle("Actual vs. Predicted (Model 5)")
+
+ggplot(data = Cost_test, aes(x = total_cost)) +
+  geom_point(aes(y = pred_test6)) +
+  ggtitle("Actual vs. Predicted (Model 6)")
+```
+
+>The provided code generates scatter plots for each Random forest model, comparing the actual total costs from the test data (x-axis) with the corresponding predicted values (y-axis).
+
+>model_rf3 exhibits the tightest clustering around the diagonal, reflecting its superior predictive accuracy, as corroborated by the previously computed MAE and RMSE metrics.
+
+
+>Conclusion:
+Best Train Set Performance:
+Random Forest Model (ModelRF3): Achieves the lowest MAE (432.29), indicating superior training set performance.
+
+>Best Test Set Performance:
+Random Forest Model (ModelRF3): Maintains the lowest MAE (944.79) on the test set, demonstrating better generalization to unseen data.
+
+>Overall Assessment:
+ModelRF3 (Random Forest): Performs consistently well on both train and test sets, making it the preferred model for this prediction task.
+
+>Linear models, while showing variation in performance, generally tend to have higher errors compared to the random forest model. ModelRF3 stands out with a relatively low error, emphasizing its robustness.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
